@@ -73,7 +73,7 @@ Scoring definitions, the labeling guide and the fixtures are in [eval/README.md]
 
 ## Quick start
 
-**Prerequisites:** Python 3.10–3.13 (PyTorch has no wheels for 3.14 yet) and Node 20.19+ or 22.12+.
+**Prerequisites:** Python 3.10–3.13 (tested on 3.13; the Render deploy is pinned to 3.13.5) and Node 20.19+ or 22.12+.
 
 ### 1. Backend
 
@@ -139,7 +139,8 @@ are labelled `analyzer: mock-heuristic`. This is useful as a backup if the venue
 | `MIRAGE_STRUCTURED_OUTPUTS` | `1` | Schema-constrained decoding for extraction |
 | `MIRAGE_MOCK_FORCE_INVALID_EXTRACTION` | `0` | Testing only: the offline mock extractor emits schema-invalid output, to demo the `needs_review` path |
 | `MIRAGE_REFUSAL_FALLBACKS` | `1` | Server-side refusal fallbacks (`fallbacks: "default"`); turned off automatically if the API rejects them |
-| `MIRAGE_EMBEDDINGS` | `auto` | `auto` (sentence-transformers, falling back to hashing if unavailable) or `hashing` |
+| `MIRAGE_EMBEDDINGS` | `auto` | `auto` (all-MiniLM-L6-v2 via fastembed/ONNX, falling back to hashing if unavailable) or `hashing` |
+| `MIRAGE_MODEL_CACHE` | `backend/.model_cache` | Where the embedding model is downloaded |
 | `MIRAGE_SIMILARITY_THRESHOLD` | `0.70` | Cosine threshold for linking incidents (see [calibration](#how-the-campaign-linking-works)) |
 | `MIRAGE_CORS_ORIGINS` | `*` | Comma-separated origins, for a split frontend/backend deploy |
 
@@ -258,7 +259,12 @@ same-campaign pairs would not link. Leaving the technique and tactic labels out 
 the gap, because those small shared vocabularies (almost every scam uses "urgency") pushed unrelated campaigns closer
 together. The default is therefore **0.70**. You can change it with `MIRAGE_SIMILARITY_THRESHOLD`, and the value is
 shown on the Threat Map. The `hashing` embedding fallback is not calibrated for this threshold; use it only if
-sentence-transformers can't be installed.
+fastembed can't be installed.
+
+**Why fastembed, not sentence-transformers.** The model runs through ONNX Runtime instead of PyTorch. We checked the
+vectors against the PyTorch build: cosine 1.0 on identical text and identical pairwise similarities, so the
+calibration above is unchanged. The whole backend then uses about 250 MB instead of about 525 MB, which fits a
+512 MB free instance.
 
 ## Safety by design
 
@@ -299,13 +305,22 @@ python eval/run_eval.py
 
 ## Deploying
 
-- **Backend on Render:** create a Web Service with root directory `backend`, build command
-  `pip install -r requirements.txt`, and start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Add a
-  Render Postgres instance and set `DATABASE_URL` (its `postgres://` URL works as-is), `ANTHROPIC_API_KEY`, and
-  `MIRAGE_CORS_ORIGINS=https://<your-app>.vercel.app`. PyTorch plus MiniLM needs about 1 GB of RAM, which exceeds
-  Render's free tier. Use a paid instance, or set `MIRAGE_EMBEDDINGS=hashing` and re-tune the threshold.
-- **Frontend on Vercel:** set root directory `frontend`, framework preset Vite, and environment variable
-  `VITE_API_URL=https://<your-backend>.onrender.com`.
+The backend and frontend deploy separately. Vercel's per-request function timeouts and lack of a persistent
+connection pool don't suit a FastAPI app that makes multi-second LLM calls and holds a Postgres connection.
+
+- **Backend on Render, via [render.yaml](render.yaml).** In the Render dashboard, choose **New → Blueprint** and
+  connect this repo. Enter `ANTHROPIC_API_KEY` when prompted, then **Apply**. The Blueprint creates:
+  - the `mirage-backend` web service: free plan, Singapore, root `backend`, Python 3.13.5, health check `/health`.
+    The build pre-downloads the embedding model.
+  - the free `mirage-db` Postgres database, with `DATABASE_URL` wired from it automatically.
+
+  It also sets `MIRAGE_LLM_MODE=live`, so a missing key fails visibly instead of silently mocking.
+  `MIRAGE_CORS_ORIGINS` starts as `*`; set it to the Vercel frontend URL once that exists.
+  Free-tier caveats: the service sleeps after 15 idle minutes and the first request takes about a minute. Free
+  Postgres expires 30 days after creation and is deleted 14 days later unless upgraded.
+- **Frontend on Vercel:** root directory `frontend`, framework preset Vite (build `npm run build`, output `dist`),
+  and environment variable `VITE_API_URL=https://<your-backend>.onrender.com`. It is baked in at build time, so
+  redeploy after changing it.
 
 ## Project layout
 
@@ -319,7 +334,7 @@ backend/
     llm.py             Claude calls, refusal handling, JSON validation + retry, PII masking
     mock_llm.py        offline stand-in for Claude
     pipeline.py        close -> extract -> embed -> link
-    embeddings.py      sentence-transformers with hashing fallback, cosine similarity
+    embeddings.py      fastembed (ONNX MiniLM) with hashing fallback, cosine similarity
     clustering.py      union-find attacker clusters
     report.py          markdown report + defensive-action lookup
     mitre.py           ATT&CK techniques, explanations, defenses, tactic vocabulary

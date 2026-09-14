@@ -44,9 +44,12 @@ STRUCTURED_OUTPUTS = os.getenv("MIRAGE_STRUCTURED_OUTPUTS", "1") == "1"
 MOCK_FORCE_INVALID_EXTRACTION = os.getenv("MIRAGE_MOCK_FORCE_INVALID_EXTRACTION", "0") == "1"
 
 # --- Embeddings / similarity ---------------------------------------------
-# auto: sentence-transformers if importable, else a dependency-free hashing embedder.
+# auto: fastembed (ONNX all-MiniLM-L6-v2) if importable, else a dependency-free hashing embedder.
 EMBEDDING_BACKEND = os.getenv("MIRAGE_EMBEDDINGS", "auto").lower()
+# Same name as the sentence-transformers build: the ONNX vectors are identical, so stored embeddings stay comparable.
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# Downloaded model files. Inside the project so a build step can pre-fetch them (no download on cold start).
+MODEL_CACHE_DIR = Path(os.getenv("MIRAGE_MODEL_CACHE") or BACKEND_DIR / ".model_cache")
 
 # Two incident profiles whose embeddings exceed this cosine similarity are linked
 # as the same attacker / campaign. Calibrated for all-MiniLM-L6-v2 on paraphrased profiles:

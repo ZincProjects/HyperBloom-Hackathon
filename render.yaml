@@ -1,0 +1,36 @@
+# Render Blueprint: MIRAGE backend (FastAPI) + free Postgres.
+# Render dashboard -> New -> Blueprint -> connect ZincProjects/HyperBloom-Hackathon -> enter ANTHROPIC_API_KEY -> Apply.
+services:
+  - type: web
+    name: mirage-backend
+    runtime: python
+    plan: free
+    region: singapore
+    rootDir: backend
+    # Pre-download the ONNX embedding model during the build (so cold starts don't fetch it),
+    # and fail the build loudly if it can't be loaded rather than silently degrading.
+    buildCommand: pip install -r requirements.txt && python -c "from app import embeddings; embeddings.warm_up(); assert embeddings.status()['model'] != embeddings.HASHING_MODEL_NAME, 'embedding model failed to load'"
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.5"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mirage-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Fail visibly if the key is missing instead of silently running the offline mock.
+      - key: MIRAGE_LLM_MODE
+        value: live
+      # Temporarily open; replaced with the Vercel frontend URL once it is deployed.
+      - key: MIRAGE_CORS_ORIGINS
+        value: "*"
+
+databases:
+  - name: mirage-db
+    plan: free
+    region: singapore
+    databaseName: mirage
+    user: mirage

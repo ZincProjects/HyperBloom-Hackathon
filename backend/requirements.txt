@@ -4,6 +4,7 @@ sqlalchemy>=2.0.30
 pydantic>=2.7
 python-dotenv>=1.0
 anthropic>=1.0
-sentence-transformers>=3.0
+# all-MiniLM-L6-v2 via ONNX Runtime (no PyTorch): same vectors, ~1/3 the memory of sentence-transformers.
+fastembed>=0.8
 # Only needed when DATABASE_URL points at Postgres:
 psycopg[binary]>=3.2
