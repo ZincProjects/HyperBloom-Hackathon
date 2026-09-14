@@ -1,0 +1,20 @@
+{
+  "id": "romance-02",
+  "script_type": "Romance Scam",
+  "difficulty": "clean",
+  "notes": "Fake naval officer, Telegram handle, then asks for Steam gift cards under threat of losing his posting. Rule 4 -> T1657. The handle is an 'other' IOC and the gift cards are payment_account. Fear (arrest or losing the posting), likability and urgency.",
+  "messages": [
+    {"sender": "attacker", "content": "Good evening Marcus. I am Captain Rob Harlow, currently deployed at sea. Your profile photo made me smile. You look like a trustworthy man."},
+    {"sender": "persona", "content": "ha, thanks I guess? do I know you? I mostly use this app for keyboard forums"},
+    {"sender": "attacker", "content": "Fate brought us together, my friend. Message me on Telegram, @rob_harlow_navy, because the ship network blocks this app."},
+    {"sender": "persona", "content": "maybe later, I'm at work. what ship are you on?"},
+    {"sender": "attacker", "content": "I can't say for security reasons. Marcus, I'm in trouble. My leave request needs a processing fee, and if I don't pay it the commander says I'll lose my posting or even be detained."},
+    {"sender": "persona", "content": "that sounds really odd. can't the navy just take it out of your pay?"},
+    {"sender": "attacker", "content": "Only Steam gift cards are accepted out here. Please buy $500 of Steam gift cards and send photos of the codes on Telegram tonight. You're the only person I trust."}
+  ],
+  "expected": {
+    "mitre_technique": "T1657",
+    "ioc_types": ["other", "payment_account"],
+    "manipulation_tactics": ["fear", "likability", "urgency"]
+  }
+}

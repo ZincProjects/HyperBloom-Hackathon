@@ -43,6 +43,8 @@ def build_report(db: Session, incident: Incident) -> str:
         "",
         profile.attacker_goal,
         "",
+        f"_Extractor's self-reported confidence in this summary: **{profile.attacker_goal_confidence or 'not recorded'}**._",
+        "",
         "## MITRE ATT&CK technique",
         "",
         f"**[{profile.mitre_technique}]({_attack_url(tid)})**" if tid else f"**{profile.mitre_technique}**",

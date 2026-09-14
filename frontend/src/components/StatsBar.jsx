@@ -20,7 +20,11 @@ export default function StatsBar({ stats }) {
   const s = stats || {};
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-      <StatCard label="Total incidents" value={s.total_incidents} sub={`${s.analyzed_incidents ?? 0} analyzed`} />
+      <StatCard
+        label="Total incidents"
+        value={s.total_incidents}
+        sub={`${s.analyzed_incidents ?? 0} analyzed · ${s.needs_review_incidents ?? 0} need review`}
+      />
       <StatCard
         label="Open threats"
         value={s.open_incidents}

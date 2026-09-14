@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from .config import SIMILARITY_THRESHOLD
 from .embeddings import cosine_similarity, embed
 from .llm import extract_profile
+from .mitre import technique_label
 from .models import Incident, IncidentLink, IncidentProfile
 from .schemas import ExtractedProfile
 
@@ -36,7 +37,8 @@ def profile_text(profile: ExtractedProfile) -> str:
 
 
 def analyze_incident(db: Session, incident: Incident) -> list[IncidentLink]:
-    """Extract + embed + link. Raises llm.LLMError if extraction fails; nothing is written in that case."""
+    """Extract + embed + link. Raises llm.ExtractionValidationError / llm.LLMError if extraction fails;
+    nothing is written in that case."""
     extracted, analyzer = extract_profile(incident.messages)
     vector, model_name = embed(profile_text(extracted))
 
@@ -54,10 +56,11 @@ def analyze_incident(db: Session, incident: Incident) -> list[IncidentLink]:
             ))
 
     incident.profile = IncidentProfile(
-        mitre_technique=extracted.mitre_technique,
+        mitre_technique=technique_label(extracted.mitre_technique),
         iocs=[ioc.model_dump() for ioc in extracted.iocs],
         manipulation_tactics=list(extracted.manipulation_tactics),
         attacker_goal=extracted.attacker_goal,
+        attacker_goal_confidence=extracted.attacker_goal_confidence,
         embedding=vector,
         embedding_model=model_name,
         analyzer=analyzer,

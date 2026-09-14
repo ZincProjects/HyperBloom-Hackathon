@@ -1,0 +1,20 @@
+{
+  "id": "ambiguous-01",
+  "script_type": "Ambiguous: vendor payment change + credential link",
+  "difficulty": "ambiguous",
+  "notes": "Deliberately messy. It reads like vendor bank-detail fraud (T1656 / T1199 / T1657 are all tempting), with typos and a topic pivot. The attacker's actual ask is to log in with Acme credentials on a 'supplier portal' link to view the remittance form, so rule 1 -> T1598.003. The new bank account is a payment_account IOC. The only clear tactic is urgency (Friday payment run).",
+  "messages": [
+    {"sender": "attacker", "content": "hi, is this acme accounts payable? its Sam from Brightline Logistics accounts dept"},
+    {"sender": "persona", "content": "hi Sam! yes this is AP, I'm Amy. how can I help?"},
+    {"sender": "attacker", "content": "we changed banks last month so pls update our remit details before the friday payment run. new acct is XXXX-9187 at First Harbor"},
+    {"sender": "persona", "content": "ok, we usually need a signed form for bank changes. is there a vendor ID on your side?"},
+    {"sender": "attacker", "content": "yes its all on the updated remittance form. you can see it on our supplier portal https://brightline-supplier-portal.example/remit just sign in with your acme email + password so it knows your company"},
+    {"sender": "persona", "content": "hmm, why would your portal need my Acme password? let me double check with my manager"},
+    {"sender": "attacker", "content": "its just SSO, everyone does it. sorry for the rush, we just really cant miss friday or our drivers dont get paid"}
+  ],
+  "expected": {
+    "mitre_technique": "T1598.003",
+    "ioc_types": ["payment_account", "url"],
+    "manipulation_tactics": ["urgency"]
+  }
+}

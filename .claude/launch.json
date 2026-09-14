@@ -8,6 +8,12 @@
       "port": 8000
     },
     {
+      "name": "backend-force-invalid-extraction",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set MIRAGE_LLM_MODE=mock&& set MIRAGE_MOCK_FORCE_INVALID_EXTRACTION=1&& backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir backend --port 8000"],
+      "port": 8000
+    },
+    {
       "name": "frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],

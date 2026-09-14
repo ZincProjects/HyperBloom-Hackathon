@@ -63,6 +63,7 @@ export default function IncidentView({
   const active = incident.status === "active";
   const exchanges = incident.exchange_count;
   const ready = exchanges >= RECOMMENDED_EXCHANGES;
+  const needsReview = incident.status === "needs_review";
   const needsAnalysisRetry = !active && !incident.profile && count > 0;
   const iocValues = (incident.profile?.iocs ?? []).map((i) => i.value);
 
@@ -96,8 +97,14 @@ export default function IncidentView({
           </div>
         )}
         {!active && (
-          <div className="flex items-center gap-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-emerald-500/70">
-            <span className="h-px flex-1 bg-emerald-500/20" /> Incident closed <span className="h-px flex-1 bg-emerald-500/20" />
+          <div
+            className={`flex items-center gap-3 py-2 text-[10px] font-semibold uppercase tracking-widest ${
+              needsReview ? "text-violet-400/80" : "text-emerald-500/70"
+            }`}
+          >
+            <span className={`h-px flex-1 ${needsReview ? "bg-violet-500/30" : "bg-emerald-500/20"}`} />
+            {needsReview ? "Incident closed · needs review" : "Incident closed"}
+            <span className={`h-px flex-1 ${needsReview ? "bg-violet-500/30" : "bg-emerald-500/20"}`} />
           </div>
         )}
       </div>
@@ -134,6 +141,15 @@ export default function IncidentView({
                 {closing ? <Spinner /> : "⛨"} Close &amp; analyze
               </Button>
             </div>
+          </>
+        ) : needsReview ? (
+          <>
+            <span className="text-xs text-violet-300">
+              ⚑ Flagged for manual review — extraction did not meet the validation schema; no profile was generated.
+            </span>
+            <Button variant="review" onClick={onClose} disabled={closing} className="ml-auto">
+              {closing ? <Spinner /> : "↻"} Retry extraction
+            </Button>
           </>
         ) : needsAnalysisRetry ? (
           <Button variant="amber" onClick={onClose} disabled={closing}>

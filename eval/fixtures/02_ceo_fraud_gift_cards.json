@@ -1,0 +1,20 @@
+{
+  "id": "ceo-fraud-02",
+  "script_type": "CEO Fraud",
+  "difficulty": "clean",
+  "notes": "CEO impersonation asking for gift cards for 'client gifts', with a promised reimbursement and thank-you. Rule 2 -> T1656. Gift cards count as payment_account; the texting number is a phone IOC.",
+  "messages": [
+    {"sender": "attacker", "content": "Marcus, it's Daniel Okoye. Quick one - are you in the office? I need something sorted before my client lunch."},
+    {"sender": "persona", "content": "hey Daniel! yep at my desk. is this an IT thing? happy to help, just need a ticket number"},
+    {"sender": "attacker", "content": "Not IT. I need 8 Apple gift cards at $200 each for client appreciation gifts. Could you pick them up at the store downstairs within the next hour?"},
+    {"sender": "persona", "content": "uh sure, maybe. would that go on a corporate card? I don't think I have one"},
+    {"sender": "attacker", "content": "Use your own card and I'll make sure you're reimbursed today, plus a little thank-you from me for helping out. Scratch off the backs and text photos of the codes to my personal cell +1 (415) 555-0178."},
+    {"sender": "persona", "content": "haha ok. why the personal cell though? I can't find that number in the directory"},
+    {"sender": "attacker", "content": "My work phone died. I'm the CEO, I'm approving it. Lunch starts at 12:30, so I really need the codes before then."}
+  ],
+  "expected": {
+    "mitre_technique": "T1656",
+    "ioc_types": ["payment_account", "phone"],
+    "manipulation_tactics": ["authority", "reciprocity", "urgency"]
+  }
+}

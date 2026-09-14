@@ -1,0 +1,20 @@
+{
+  "id": "fake-it-02",
+  "script_type": "Fake IT Support",
+  "difficulty": "clean",
+  "notes": "Fake helpdesk agent with no link at all: asks the target to type their password into chat for a 'VPN migration'. No capture page, so rule 1 does not apply; rule 2 (pretends to be internal IT) -> T1656. Tests the rule 1 vs rule 2 boundary.",
+  "messages": [
+    {"sender": "attacker", "content": "Hi Marcus, Jordan from the network team here. We're migrating everyone to the new VPN gateway tonight and your laptop failed the pre-check."},
+    {"sender": "persona", "content": "oh weird, I'm on the helpdesk team myself - which change ticket is this under? I don't see it in the CAB calendar"},
+    {"sender": "attacker", "content": "It's an emergency change so it won't show yet. I just need to re-sync your account. Can you type your current password here and I'll push the profile?"},
+    {"sender": "persona", "content": "haha you know I can't do that. what's your extension? I'll ping you on Teams"},
+    {"sender": "attacker", "content": "Teams is down for the migration. Call me on +1 (646) 555-0133 or email itsupport@acme-helpdesk.example. Directors approved this change, so please cooperate."},
+    {"sender": "persona", "content": "sure, give me a sec, three P2s just landed in my queue"},
+    {"sender": "attacker", "content": "The window closes at 6pm. If your profile isn't synced by then you'll be locked out of VPN tomorrow morning."}
+  ],
+  "expected": {
+    "mitre_technique": "T1656",
+    "ioc_types": ["email", "phone"],
+    "manipulation_tactics": ["authority", "fear", "urgency"]
+  }
+}

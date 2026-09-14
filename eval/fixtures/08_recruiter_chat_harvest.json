@@ -1,0 +1,20 @@
+{
+  "id": "recruiter-02",
+  "script_type": "Recruiter Scam",
+  "difficulty": "clean",
+  "notes": "Fake recruiter harvests SSN, date of birth and bank details directly in chat (no link) plus a Zelle 'equipment fee'. Rule 1 does not apply (no link), rule 2 does not apply (not a known internal or trusted party), rule 3 -> T1598. Scarcity and urgency.",
+  "messages": [
+    {"sender": "attacker", "content": "Hello Marcus, this is Kevin Park, a recruiter with TalentBridge. We have an IT Support Lead opening, fully remote, $48/hr. Interested?"},
+    {"sender": "persona", "content": "maybe! what's the company? I'd want to see a job posting first"},
+    {"sender": "attacker", "content": "The client prefers to stay anonymous. The hiring manager already approved you from your resume, and we're only taking 3 candidates."},
+    {"sender": "persona", "content": "that's fast lol, I never sent a resume. is there an interview?"},
+    {"sender": "attacker", "content": "The interview is waived. To start onboarding, just reply here with your full legal name, date of birth, SSN and bank routing and account number for direct deposit."},
+    {"sender": "persona", "content": "I'm not comfortable sending that over chat. can I call you? what's your number?"},
+    {"sender": "attacker", "content": "WhatsApp me at +1 (312) 555-0149. There's also a $60 equipment fee, sent via Zelle to account XXXX-3390. We need both today or the offer goes to the next candidate."}
+  ],
+  "expected": {
+    "mitre_technique": "T1598",
+    "ioc_types": ["payment_account", "phone"],
+    "manipulation_tactics": ["scarcity", "urgency"]
+  }
+}

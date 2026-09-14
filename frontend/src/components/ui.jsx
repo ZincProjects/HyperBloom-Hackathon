@@ -1,4 +1,14 @@
 export function StatusBadge({ status }) {
+  if (status === "needs_review") {
+    return (
+      <span
+        title="Extraction did not meet the validation schema; no profile was generated"
+        className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/50 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300"
+      >
+        ⚑ Needs review
+      </span>
+    );
+  }
   if (status === "active") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-400">
@@ -11,6 +21,28 @@ export function StatusBadge({ status }) {
     <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
       Closed
+    </span>
+  );
+}
+
+const CONFIDENCE_STYLES = {
+  high: { dot: "bg-emerald-400", text: "text-emerald-300", border: "border-emerald-500/40" },
+  medium: { dot: "bg-yellow-300", text: "text-yellow-200", border: "border-yellow-400/40" },
+  low: { dot: "bg-orange-400", text: "text-orange-300", border: "border-orange-500/50" },
+};
+
+export function ConfidenceBadge({ level }) {
+  const style = CONFIDENCE_STYLES[level];
+  if (!style) {
+    return <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">confidence n/a</span>;
+  }
+  return (
+    <span
+      title="The extractor's self-reported confidence in this summary: how explicit the transcript was vs. how much it had to infer"
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${style.border} ${style.text}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+      {level} confidence
     </span>
   );
 }
@@ -30,6 +62,7 @@ const BUTTON_VARIANTS = {
     "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:text-slate-500 disabled:hover:bg-slate-800",
   danger: "bg-red-500 text-white hover:bg-red-400 disabled:bg-slate-700 disabled:text-slate-400",
   amber: "bg-amber-400 text-slate-950 hover:bg-amber-300 disabled:bg-slate-700 disabled:text-slate-400",
+  review: "bg-violet-500 text-white hover:bg-violet-400 disabled:bg-slate-700 disabled:text-slate-400",
   ghost: "text-slate-400 hover:text-slate-200 hover:bg-slate-800",
 };
 

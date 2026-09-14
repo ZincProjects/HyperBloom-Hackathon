@@ -42,8 +42,11 @@ class Incident(Base):
     attacker_script_id: Mapped[int | None] = mapped_column(ForeignKey("attacker_scripts.id"), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="active")  # active | closed
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | closed | needs_review
     channel: Mapped[str] = mapped_column(String(16), default="text")  # text | email | voice
+    # Set when extraction failed schema validation on every attempt: the raw model output(s) and
+    # validation errors, kept for debugging. Cleared once a valid profile is extracted.
+    raw_extraction_output: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     persona: Mapped[Persona] = relationship()
     attacker_script: Mapped[AttackerScript | None] = relationship()
@@ -76,6 +79,8 @@ class IncidentProfile(Base):
     iocs: Mapped[list] = mapped_column(JSON, default=list)  # [{type, value}]
     manipulation_tactics: Mapped[list] = mapped_column(JSON, default=list)  # [str]
     attacker_goal: Mapped[str] = mapped_column(Text)
+    # The extractor's self-reported confidence in attacker_goal: high | medium | low.
+    attacker_goal_confidence: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # Stored as a JSON float array; cosine similarity is computed in Python.
     embedding: Mapped[list] = mapped_column(JSON, default=list)
     embedding_model: Mapped[str] = mapped_column(String(120), default="")

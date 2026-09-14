@@ -8,22 +8,51 @@ from pydantic import ValidationError
 
 from . import mock_llm
 from .config import (
-    CHAT_EFFORT, CHAT_MODEL, EXTRACTION_EFFORT, EXTRACTION_MODEL, REFUSAL_FALLBACKS, llm_mode,
+    CHAT_EFFORT, CHAT_MODEL, EXTRACTION_EFFORT, EXTRACTION_MODEL, EXTRACTION_TEMPERATURE, REFUSAL_FALLBACKS,
+    STRUCTURED_OUTPUTS, llm_mode,
 )
 from .prompts import (
     ATTACKER_KICKOFF, EXTRACTION_RETRY_TEMPLATE, EXTRACTION_SYSTEM_PROMPT, format_transcript,
 )
-from .schemas import ExtractedProfile
+from .schemas import EXTRACTION_JSON_SCHEMA, ExtractedProfile
 
 log = logging.getLogger("mirage.llm")
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 CHAT_MAX_TOKENS = 4000
 EXTRACTION_MAX_TOKENS = 8000
+# The first extraction call plus exactly one error-feedback retry. After that the incident is
+# flagged needs_review; no profile is guessed.
+MAX_EXTRACTION_ATTEMPTS = 2
+
+# Models that reject temperature/top_p/top_k with a 400. Any other model is sent temperature on the
+# extraction call; if the API rejects it anyway, the model is added here at runtime.
+_SAMPLING_UNSUPPORTED = {
+    "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5",
+    "claude-fable-5", "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1",
+}
 
 
 class LLMError(RuntimeError):
     """An LLM call failed in a way the API layer should surface (HTTP 502)."""
+
+
+class ExtractionValidationError(LLMError):
+    """The extractor's output failed schema validation on every attempt."""
+
+    def __init__(self, attempts: list[tuple[str, str]]):
+        self.attempts = attempts  # [(raw model output, validation error)]
+        super().__init__(
+            f"Extraction output failed schema validation on all {len(attempts)} attempts. "
+            f"Last error: {attempts[-1][1]}"
+        )
+
+    @property
+    def raw_output(self) -> str:
+        return "\n\n".join(
+            f"=== attempt {i}: raw output ===\n{raw}\n=== attempt {i}: validation error ===\n{error}"
+            for i, (raw, error) in enumerate(self.attempts, 1)
+        )
 
 
 _client: anthropic.Anthropic | None = None
@@ -37,7 +66,24 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
-def _create(**kwargs):
+def sampling_supported(model: str) -> bool:
+    return model not in _SAMPLING_UNSUPPORTED
+
+
+def extraction_settings() -> dict:
+    """How the extraction call is configured; reported by /health and the eval harness."""
+    if llm_mode() == "mock":
+        return {"analyzer": "mock-heuristic", "max_attempts": MAX_EXTRACTION_ATTEMPTS}
+    return {
+        "analyzer": EXTRACTION_MODEL,
+        "effort": EXTRACTION_EFFORT,
+        "temperature": EXTRACTION_TEMPERATURE if sampling_supported(EXTRACTION_MODEL) else "not accepted by model (omitted)",
+        "structured_outputs": STRUCTURED_OUTPUTS,
+        "max_attempts": MAX_EXTRACTION_ATTEMPTS,
+    }
+
+
+def _create_with_fallbacks(**kwargs):
     """messages.create with server-side refusal fallbacks when available."""
     global _fallbacks_enabled
     client = _get_client()
@@ -52,14 +98,36 @@ def _create(**kwargs):
     return client.messages.create(**kwargs)
 
 
-def _complete(*, model: str, system: str, messages: list[dict], max_tokens: int, effort: str) -> str:
+def _create(*, temperature: float | None = None, **kwargs):
+    model = kwargs["model"]
+    if temperature is not None and sampling_supported(model):
+        try:
+            # anthropic 1.x no longer exposes sampling params as keyword arguments; extra_body sends the
+            # API field directly for models that still accept it.
+            return _create_with_fallbacks(extra_body={"temperature": temperature}, **kwargs)
+        except anthropic.BadRequestError as exc:
+            if "temperature" not in str(exc).lower():
+                raise
+            log.warning("%s rejected temperature (%s); relying on structured outputs instead", model, exc)
+            _SAMPLING_UNSUPPORTED.add(model)
+    return _create_with_fallbacks(**kwargs)
+
+
+def _complete(
+    *, model: str, system: str, messages: list[dict], max_tokens: int, effort: str,
+    temperature: float | None = None, output_format: dict | None = None,
+) -> str:
+    output_config: dict = {"effort": effort}
+    if output_format:
+        output_config["format"] = output_format
     try:
         response = _create(
             model=model,
             system=system,
             messages=messages,
             max_tokens=max_tokens,
-            output_config={"effort": effort},
+            output_config=output_config,
+            temperature=temperature,
         )
     except anthropic.AuthenticationError as exc:
         raise LLMError("Anthropic authentication failed - check ANTHROPIC_API_KEY.") from exc
@@ -104,6 +172,7 @@ def _clean_chat(text: str, speaker_name: str | None = None) -> str:
 
 
 # --- Roles ---------------------------------------------------------------------
+# Persona and attacker turns never set temperature: they run at the API default (1.0) to stay conversational.
 def persona_reply(incident) -> str:
     """The decoy employee's reply to the latest attacker message."""
     if llm_mode() == "mock":
@@ -144,28 +213,48 @@ def _parse_profile(raw: str) -> ExtractedProfile:
     return ExtractedProfile.model_validate(json.loads(text[start:end + 1]))
 
 
-def extract_profile(messages) -> tuple[ExtractedProfile, str]:
-    """Structured incident profile from the transcript: (validated profile, analyzer name)."""
-    if llm_mode() == "mock":
-        return mock_llm.extract_profile(messages), "mock-heuristic"
+def _describe_error(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        parts = []
+        for err in exc.errors():
+            loc = ".".join(str(p) for p in err["loc"]) or "(root)"
+            got = repr(err.get("input"))
+            parts.append(f"{loc}: {err['msg']} (got {got[:80] + '...' if len(got) > 80 else got})")
+        return "; ".join(parts)
+    return f"invalid JSON: {exc}"
 
+
+def extract_profile(messages) -> tuple[ExtractedProfile, str]:
+    """Structured incident profile from the transcript: (validated profile, analyzer name).
+
+    Raises ExtractionValidationError if the output fails validation on every attempt, and LLMError
+    for API failures (auth, network, refusal).
+    """
+    mock = llm_mode() == "mock"
+    analyzer = "mock-heuristic" if mock else EXTRACTION_MODEL
     conversation = [{
         "role": "user",
         "content": f"<transcript>\n{format_transcript(messages)}\n</transcript>",
     }]
-    for attempt in (1, 2):
-        raw = _complete(
-            model=EXTRACTION_MODEL, system=EXTRACTION_SYSTEM_PROMPT, messages=conversation,
-            max_tokens=EXTRACTION_MAX_TOKENS, effort=EXTRACTION_EFFORT,
-        )
+    attempts: list[tuple[str, str]] = []
+    for attempt in range(1, MAX_EXTRACTION_ATTEMPTS + 1):
+        if mock:
+            raw = mock_llm.extraction_output(messages)
+        else:
+            raw = _complete(
+                model=EXTRACTION_MODEL, system=EXTRACTION_SYSTEM_PROMPT, messages=conversation,
+                max_tokens=EXTRACTION_MAX_TOKENS, effort=EXTRACTION_EFFORT,
+                temperature=EXTRACTION_TEMPERATURE,
+                output_format={"type": "json_schema", "schema": EXTRACTION_JSON_SCHEMA} if STRUCTURED_OUTPUTS else None,
+            )
         try:
-            return _parse_profile(raw), EXTRACTION_MODEL
-        except (ValueError, ValidationError) as exc:  # JSONDecodeError is a ValueError
-            log.warning("Extraction attempt %d failed validation: %s", attempt, exc)
-            if attempt == 2:
-                raise LLMError(f"Extraction output failed validation after a retry: {exc}") from exc
+            return _parse_profile(raw), analyzer
+        except (ValueError, ValidationError) as exc:  # JSONDecodeError and ValidationError are ValueErrors
+            error = _describe_error(exc)
+            attempts.append((raw, error))
+            log.warning("Extraction attempt %d/%d failed validation: %s", attempt, MAX_EXTRACTION_ATTEMPTS, error)
             conversation += [
                 {"role": "assistant", "content": raw},
-                {"role": "user", "content": EXTRACTION_RETRY_TEMPLATE.format(error=exc)},
+                {"role": "user", "content": EXTRACTION_RETRY_TEMPLATE.format(error=error)},
             ]
-    raise AssertionError("unreachable")
+    raise ExtractionValidationError(attempts)

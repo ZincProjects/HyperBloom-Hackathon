@@ -115,6 +115,8 @@ TECHNIQUES: dict[str, dict] = {
     },
 }
 
+TECHNIQUE_IDS: tuple[str, ...] = tuple(TECHNIQUES)
+
 TACTICS = ["urgency", "authority", "scarcity", "fear", "likability", "reciprocity"]
 
 TACTIC_DESCRIPTIONS = {
@@ -140,6 +142,11 @@ def canonical_technique(value: str) -> str | None:
     if not match or match.group(0) not in TECHNIQUES:
         return None
     tid = match.group(0)
+    return f"{tid} — {TECHNIQUES[tid]['name']}"
+
+
+def technique_label(tid: str) -> str:
+    """'T1656' -> 'T1656 — Impersonation' (the form stored on incident_profiles)."""
     return f"{tid} — {TECHNIQUES[tid]['name']}"
 
 

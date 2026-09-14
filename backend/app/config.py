@@ -35,6 +35,13 @@ CHAT_EFFORT = os.getenv("MIRAGE_CHAT_EFFORT", "low")
 EXTRACTION_EFFORT = os.getenv("MIRAGE_EXTRACTION_EFFORT", "medium")
 # Server-side refusal fallbacks (re-run a policy-declined request on another model).
 REFUSAL_FALLBACKS = os.getenv("MIRAGE_REFUSAL_FALLBACKS", "1") == "1"
+# Extraction determinism. temperature is sent ONLY on the extraction call, and only to models that
+# accept sampling parameters (Opus 5 / 4.8 / 4.7, Sonnet 5 and the Fable models reject them with a 400).
+# On those models the determinism lever is structured outputs: decoding constrained to the JSON schema.
+EXTRACTION_TEMPERATURE = float(os.getenv("MIRAGE_EXTRACTION_TEMPERATURE", "0"))
+STRUCTURED_OUTPUTS = os.getenv("MIRAGE_STRUCTURED_OUTPUTS", "1") == "1"
+# Testing/demo only: the offline mock extractor emits schema-invalid output, exercising needs_review.
+MOCK_FORCE_INVALID_EXTRACTION = os.getenv("MIRAGE_MOCK_FORCE_INVALID_EXTRACTION", "0") == "1"
 
 # --- Embeddings / similarity ---------------------------------------------
 # auto: sentence-transformers if importable, else a dependency-free hashing embedder.

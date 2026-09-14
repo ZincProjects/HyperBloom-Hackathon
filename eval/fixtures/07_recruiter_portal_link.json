@@ -1,0 +1,20 @@
+{
+  "id": "recruiter-01",
+  "script_type": "Recruiter Scam",
+  "difficulty": "clean",
+  "notes": "Fake recruiter sends an onboarding portal link that collects SSN and bank details. Rule 1 (link to a page capturing personal and financial data) -> T1598.003. Scarcity (two spots left), likability (flattery) and urgency (tonight).",
+  "messages": [
+    {"sender": "attacker", "content": "Hi Amy! I'm Dana from Northgate Staffing. Your finance background really stood out, and we have a remote AP Specialist role paying $52/hr."},
+    {"sender": "persona", "content": "oh nice! I actually just started a new job though. how did you find my profile?"},
+    {"sender": "attacker", "content": "Through LinkedIn. Honestly you're exactly what the client wants, and there are only two spots left after this week's screening."},
+    {"sender": "persona", "content": "haha tempting. what's the company? and what's your direct email so I can look you up?"},
+    {"sender": "attacker", "content": "It's a confidential client until you're onboarded. My email is jobs@northgate-staffing.example. To reserve your spot, complete onboarding at https://northgate-hr-onboarding.example/start"},
+    {"sender": "persona", "content": "it's asking for my SSN and bank account on the first page, is that normal before an interview?"},
+    {"sender": "attacker", "content": "Yes, it's for payroll setup and the background check. Please finish it tonight, the client closes the shortlist tomorrow morning."}
+  ],
+  "expected": {
+    "mitre_technique": "T1598.003",
+    "ioc_types": ["email", "url"],
+    "manipulation_tactics": ["likability", "scarcity", "urgency"]
+  }
+}

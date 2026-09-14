@@ -1,12 +1,13 @@
 """Deterministic offline stand-in for Claude (MIRAGE_LLM_MODE=mock, or auto with no API key).
 
 Lets the whole pipeline - simulation, extraction, embeddings, linking, reports - run without network
-access. Extraction here is a regex/keyword heuristic, so it is clearly labelled `mock-heuristic`.
+access. Extraction here is a regex/keyword heuristic, so it is clearly labelled `mock-heuristic`. It
+returns a raw JSON string that goes through the same parse/validate/retry path as Claude's output.
 """
+import json
 import re
 
-from .mitre import TECHNIQUES
-from .schemas import IOC, ExtractedProfile
+from . import config
 from .seed_data import ATTACKER_SCRIPTS, PERSONA_MOCK_LINES
 
 _SCRIPT_LINES = {s["name"]: s["mock_lines"] for s in ATTACKER_SCRIPTS}
@@ -67,30 +68,45 @@ _GOALS = {
 }
 
 
-def extract_profile(messages) -> ExtractedProfile:
+def _heuristic_profile(messages) -> dict:
     attacker_text = "\n".join(m.content for m in messages if m.sender == "attacker")
     lower = attacker_text.lower()
 
-    iocs: list[IOC] = []
-    urls = [u.rstrip(".") for u in _URL_RE.findall(attacker_text)]
-    iocs += [IOC(type="url", value=u) for u in urls]
-    iocs += [IOC(type="email", value=e) for e in _EMAIL_RE.findall(attacker_text)]
-    iocs += [IOC(type="phone", value=p.strip()) for p in _PHONE_RE.findall(attacker_text)]
-    iocs += [IOC(type="payment_account", value=p.strip()) for p in _PAYMENT_RE.findall(attacker_text)]
-    iocs += [IOC(type="payment_account", value=g) for g in _GIFT_CARD_RE.findall(attacker_text)]
-    iocs += [IOC(type="other", value=r) for r in _REF_RE.findall(attacker_text)]
-    iocs += [IOC(type="other", value=h) for h in _HANDLE_RE.findall(attacker_text)]
+    iocs = [{"type": "url", "value": u.rstrip(".")} for u in _URL_RE.findall(attacker_text)]
+    iocs += [{"type": "email", "value": e} for e in _EMAIL_RE.findall(attacker_text)]
+    iocs += [{"type": "phone", "value": p.strip()} for p in _PHONE_RE.findall(attacker_text)]
+    iocs += [{"type": "payment_account", "value": p.strip()} for p in _PAYMENT_RE.findall(attacker_text)]
+    iocs += [{"type": "payment_account", "value": g} for g in _GIFT_CARD_RE.findall(attacker_text)]
+    iocs += [{"type": "other", "value": r} for r in _REF_RE.findall(attacker_text)]
+    iocs += [{"type": "other", "value": h} for h in _HANDLE_RE.findall(attacker_text)]
 
     tactics = [t for t, words in _TACTIC_KEYWORDS.items() if any(w in lower for w in words)]
     scores = {tid: sum(lower.count(w) for w in words) for tid, words in _TECHNIQUE_KEYWORDS.items()}
     best = max(scores, key=scores.get)
-    if scores[best] == 0:
+    signal = scores[best]
+    if signal == 0:
         best = "T1566"
     goal = _GOALS.get(best, "Manipulate the target into taking a harmful action or disclosing sensitive information.")
 
-    return ExtractedProfile(
-        mitre_technique=f"{best} — {TECHNIQUES[best]['name']}",
-        iocs=iocs,
-        manipulation_tactics=tactics,
-        attacker_goal=goal,
-    )
+    return {
+        "mitre_technique": best,
+        "iocs": iocs,
+        "manipulation_tactics": tactics,
+        "attacker_goal": goal,
+        # Keyword hits stand in for "how explicit was the transcript".
+        "attacker_goal_confidence": "high" if signal >= 4 else "medium" if signal >= 1 else "low",
+    }
+
+
+def extraction_output(messages) -> str:
+    """Raw extractor output as a JSON string."""
+    if config.MOCK_FORCE_INVALID_EXTRACTION:
+        # An extractor ignoring the schema: invented technique, off-vocabulary tactic and confidence.
+        return json.dumps({
+            "mitre_technique": "T1566.999 — Business Email Scam",
+            "iocs": [{"type": "URL", "value": "https://docs.acmecorp-exec.example/invoice/INV-20931"}],
+            "manipulation_tactics": ["greed", "Urgency"],
+            "attacker_goal": "Probably wants money.",
+            "attacker_goal_confidence": "certain",
+        })
+    return json.dumps(_heuristic_profile(messages))

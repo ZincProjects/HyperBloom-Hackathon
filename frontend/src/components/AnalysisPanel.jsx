@@ -1,4 +1,5 @@
-import { Button, Panel, Spinner, TacticTag } from "./ui.jsx";
+import { useState } from "react";
+import { Button, ConfidenceBadge, Panel, Spinner, TacticTag } from "./ui.jsx";
 
 const IOC_LABELS = {
   url: "URL",
@@ -49,7 +50,46 @@ function Pending({ closing }) {
   );
 }
 
-export default function AnalysisPanel({ incident, closing, onReport, reportLoading, onSelectIncident }) {
+function NeedsReview({ incident, closing, onRetry }) {
+  const [showRaw, setShowRaw] = useState(false);
+  return (
+    <div className="scrollbar-thin min-h-0 space-y-3 overflow-y-auto pr-1">
+      <div className="rounded-lg border border-violet-400/50 bg-violet-500/10 p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-widest text-violet-300">⚑ Flagged for manual review</div>
+        <p className="mt-2 text-sm leading-relaxed text-violet-100/90">{incident.review_message}</p>
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+          The extractor's output failed schema validation on its first attempt and on one retry with the validation
+          error. MIRAGE does not fall back to a guessed profile: no MITRE technique, IOCs, report or campaign links exist
+          for this incident until an extraction passes validation.
+        </p>
+        <Button variant="review" className="mt-3" onClick={onRetry} disabled={closing}>
+          {closing ? <Spinner /> : "↻"} Retry extraction
+        </Button>
+      </div>
+      {incident.raw_extraction_output && (
+        <Panel
+          title="Raw extractor output (debug)"
+          action={
+            <button onClick={() => setShowRaw((v) => !v)} className="text-xs text-slate-400 hover:text-slate-200">
+              {showRaw ? "Hide" : "Show"}
+            </button>
+          }
+        >
+          {showRaw && (
+            <pre className="scrollbar-thin max-h-96 overflow-auto whitespace-pre-wrap break-all p-4 font-mono text-[11px] leading-relaxed text-slate-400">
+              {incident.raw_extraction_output}
+            </pre>
+          )}
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+export default function AnalysisPanel({ incident, closing, onReport, reportLoading, onSelectIncident, onRetryExtraction }) {
+  if (incident.status === "needs_review") {
+    return <NeedsReview incident={incident} closing={closing} onRetry={onRetryExtraction} />;
+  }
   const profile = incident.profile;
   if (!profile) return <Pending closing={closing} />;
 
@@ -66,7 +106,7 @@ export default function AnalysisPanel({ incident, closing, onReport, reportLoadi
         </div>
       )}
 
-      <Panel title="Attacker goal">
+      <Panel title="Attacker goal" action={<ConfidenceBadge level={profile.attacker_goal_confidence} />}>
         <p className="p-4 text-sm leading-relaxed text-slate-200">{profile.attacker_goal}</p>
       </Panel>
 

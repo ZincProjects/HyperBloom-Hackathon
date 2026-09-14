@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import config, embeddings
 from ..db import engine, get_db
+from ..llm import extraction_settings
 from ..models import Incident, IncidentLink, IncidentProfile, Message
 from ..serializers import all_clusters, incident_ref
 from ..mitre import technique_id
@@ -20,6 +21,7 @@ def health():
         "llm_mode": config.llm_mode(),
         "chat_model": config.CHAT_MODEL,
         "extraction_model": config.EXTRACTION_MODEL,
+        "extraction": extraction_settings(),
         "embeddings": embeddings.status(),
         "database": engine.dialect.name,
         "similarity_threshold": config.SIMILARITY_THRESHOLD,
@@ -30,6 +32,7 @@ def health():
 def stats(db: Session = Depends(get_db)):
     total = db.scalar(select(func.count(Incident.id))) or 0
     open_count = db.scalar(select(func.count(Incident.id)).where(Incident.status == "active")) or 0
+    review_count = db.scalar(select(func.count(Incident.id)).where(Incident.status == "needs_review")) or 0
     profiles = db.scalars(select(IncidentProfile)).all()
     clusters, _ = all_clusters(db)
 
@@ -38,7 +41,8 @@ def stats(db: Session = Depends(get_db)):
     return {
         "total_incidents": total,
         "open_incidents": open_count,
-        "closed_incidents": total - open_count,
+        "closed_incidents": total - open_count - review_count,
+        "needs_review_incidents": review_count,
         "analyzed_incidents": len(profiles),
         # Connected components of the incident_links graph (a singleton is its own attacker).
         "unique_attacker_clusters": len(clusters),

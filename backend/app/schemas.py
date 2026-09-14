@@ -1,27 +1,30 @@
 """Pydantic models: the LLM extraction contract plus API request bodies."""
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .mitre import TECHNIQUES, canonical_technique
+from .mitre import TACTICS, TECHNIQUE_IDS
 
-IOCType = Literal["url", "phone", "email", "payment_account", "other"]
-Tactic = Literal["urgency", "authority", "scarcity", "fear", "likability", "reciprocity"]
+IOC_TYPES = ("url", "phone", "email", "payment_account", "other")
+CONFIDENCE_LEVELS = ("high", "medium", "low")
+
+# Closed vocabularies: the model must return one of these exact strings or validation fails.
+TechniqueId = Literal[TECHNIQUE_IDS]
+Tactic = Literal[tuple(TACTICS)]
+IOCType = Literal[IOC_TYPES]
+Confidence = Literal[CONFIDENCE_LEVELS]
 
 
 # --- Structured extraction output -------------------------------------------
 class IOC(BaseModel):
-    type: IOCType
-    value: str = Field(min_length=1, max_length=500)
+    model_config = ConfigDict(extra="forbid")
 
-    @field_validator("type", mode="before")
-    @classmethod
-    def _normalize_type(cls, v):
-        return v.strip().lower() if isinstance(v, str) else v
+    type: IOCType
+    value: str
 
     @field_validator("value")
     @classmethod
-    def _strip_value(cls, v: str) -> str:
+    def _non_empty(cls, v: str) -> str:
         v = v.strip()
         if not v:
             raise ValueError("IOC value must not be empty")
@@ -29,32 +32,21 @@ class IOC(BaseModel):
 
 
 class ExtractedProfile(BaseModel):
-    mitre_technique: str
+    """The extraction contract. No normalisation of categorical fields: near-misses such as
+    'Urgency', 't1656' or 'T1656 — Impersonation' fail validation instead of being guessed at."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mitre_technique: TechniqueId
     iocs: list[IOC]
     manipulation_tactics: list[Tactic]
     attacker_goal: str = Field(min_length=5, max_length=400)
+    attacker_goal_confidence: Confidence
 
-    @field_validator("mitre_technique")
+    @field_validator("manipulation_tactics")
     @classmethod
-    def _known_technique(cls, v: str) -> str:
-        canonical = canonical_technique(v)
-        if canonical is None:
-            raise ValueError(
-                f"mitre_technique '{v}' is not in the allowed list; use one of: {', '.join(TECHNIQUES)}"
-            )
-        return canonical
-
-    @field_validator("manipulation_tactics", mode="before")
-    @classmethod
-    def _normalize_tactics(cls, v):
-        if not isinstance(v, list):
-            return v
-        seen: list = []
-        for item in v:
-            item = item.strip().lower() if isinstance(item, str) else item
-            if item not in seen:
-                seen.append(item)
-        return seen
+    def _dedupe_tactics(cls, v: list[str]) -> list[str]:
+        return list(dict.fromkeys(v))
 
     @field_validator("iocs")
     @classmethod
@@ -66,6 +58,33 @@ class ExtractedProfile(BaseModel):
                 seen.add(key)
                 out.append(ioc)
         return out
+
+
+# Sent as output_config.format so decoding itself is constrained to the same vocabularies.
+# Hand-written because structured outputs rejects minLength/maxLength; pydantic still enforces those.
+EXTRACTION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "mitre_technique": {"type": "string", "enum": list(TECHNIQUE_IDS)},
+        "iocs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": list(IOC_TYPES)},
+                    "value": {"type": "string"},
+                },
+                "required": ["type", "value"],
+                "additionalProperties": False,
+            },
+        },
+        "manipulation_tactics": {"type": "array", "items": {"type": "string", "enum": list(TACTICS)}},
+        "attacker_goal": {"type": "string"},
+        "attacker_goal_confidence": {"type": "string", "enum": list(CONFIDENCE_LEVELS)},
+    },
+    "required": ["mitre_technique", "iocs", "manipulation_tactics", "attacker_goal", "attacker_goal_confidence"],
+    "additionalProperties": False,
+}
 
 
 # --- API request bodies ------------------------------------------------------

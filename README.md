@@ -27,6 +27,50 @@ flowchart LR
 
 ---
 
+## Reliability: measured, not claimed
+
+MIRAGE doesn't quote an accuracy figure it can't back up. The extraction step is scored by a harness anyone can
+re-run, against 10 hand-labeled transcripts: 8 clean cases across the four scam types, plus 2 deliberately ambiguous
+ones. The latest measured result:
+
+<!-- EVAL:START -->
+Measured with `python eval/run_eval.py` on 2026-09-14. Analyzer: `mock-heuristic` (max_attempts=2).
+
+```text
+RESULT: 7/10 technique matches, 85% IOC-type overlap, 46% tactic-tag overlap, 0/10 needs_review (held-out eval, n=10, analyzer=mock-heuristic)
+by difficulty: ambiguous (n=2): 1/2 technique, 50% IOC-type, 50% tactics | clean (n=8): 6/8 technique, 94% IOC-type, 45% tactics
+cases passing all checks: 2/10 (technique exact + IOC-type and tactic overlap >= 50%)
+attacker_goal_confidence: high 3, medium 7, low 0
+```
+
+What this measures: agreement with our own labels on n=10 hand-labeled transcripts (2 ambiguous, 8 clean). It is a small, fixed test set, not a guarantee of accuracy on live or unseen attacker traffic.
+
+> **Note:** this block was produced by the offline regex/keyword baseline, not by Claude. Re-run with `ANTHROPIC_API_KEY` set and `--update-readme` to record the Claude number.
+<!-- EVAL:END -->
+
+**When the model isn't confident, MIRAGE fails visibly instead of fabricating.** Every extraction must pass a strict
+schema. If the output fails validation on the first attempt and again on one retry (with the validation error fed
+back), the incident is marked **needs_review**. No guessed profile, IOCs or campaign links are written. The raw model
+output is kept for an analyst, and the dashboard shows a distinct badge with a **Retry extraction** button. This is a
+deliberate design choice: a missing profile is safer than a confident-looking wrong one.
+Every profile that does pass also carries the model's self-reported `attacker_goal_confidence` (high/medium/low),
+shown next to the goal summary.
+
+How the extraction call is tightened:
+- **Closed vocabularies, enforced twice.** Schema-constrained decoding (`output_config.format` with enums) and strict
+  pydantic `Literal`s with `extra="forbid"` both cover technique IDs, tactics, IOC types and confidence. Near-misses
+  such as `Urgency` or `T1656 — Impersonation` are rejected, not normalised.
+- **Temperature.** `temperature=0` is sent on the extraction call only; persona and attacker turns keep the
+  conversational default. `claude-opus-5` rejects sampling parameters with a 400, so on that model temperature is
+  omitted and determinism comes from constrained decoding. `run_eval.py --repeat N` measures the remaining
+  run-to-run variation.
+- **One written tie-break policy** for the technique choice (a CEO-fraud wire is also "financial theft"). The
+  extraction prompt and the eval labels share it.
+
+Scoring definitions, the labeling guide and the fixtures are in [eval/README.md](eval/README.md).
+
+---
+
 ## Quick start
 
 **Prerequisites:** Python 3.10–3.13 (PyTorch has no wheels for 3.14 yet) and Node 20.19+ or 22.12+.
@@ -91,6 +135,9 @@ are labelled `analyzer: mock-heuristic`. This is useful as a backup if the venue
 | `MIRAGE_EXTRACTION_MODEL` | `claude-opus-5` | Model for structured extraction |
 | `MIRAGE_CHAT_EFFORT` | `low` | Effort for chat turns (short replies, lower latency) |
 | `MIRAGE_EXTRACTION_EFFORT` | `medium` | Effort for extraction |
+| `MIRAGE_EXTRACTION_TEMPERATURE` | `0` | Sent on the extraction call only, and only to models that accept sampling params (not Opus 5 / 4.8 / 4.7 or Sonnet 5) |
+| `MIRAGE_STRUCTURED_OUTPUTS` | `1` | Schema-constrained decoding for extraction |
+| `MIRAGE_MOCK_FORCE_INVALID_EXTRACTION` | `0` | Testing only: the offline mock extractor emits schema-invalid output, to demo the `needs_review` path |
 | `MIRAGE_REFUSAL_FALLBACKS` | `1` | Server-side refusal fallbacks (`fallbacks: "default"`); turned off automatically if the API rejects them |
 | `MIRAGE_EMBEDDINGS` | `auto` | `auto` (sentence-transformers, falling back to hashing if unavailable) or `hashing` |
 | `MIRAGE_SIMILARITY_THRESHOLD` | `0.70` | Cosine threshold for linking incidents (see [calibration](#how-the-campaign-linking-works)) |
@@ -130,7 +177,8 @@ natural next step at larger scale.
 4. **Click *Close & analyze*.** *"A second LLM pass reads the whole transcript and returns strict JSON, validated
    against a schema."* Point at the right panel: the **MITRE ATT&CK technique** with a plain-English explanation, the
    **IOC table** (the payment account, invoice link, lookalike email), and the **manipulation tactic** tags. The same
-   IOCs light up amber in the transcript.
+   IOCs light up amber in the transcript. Point at the **confidence badge** next to the goal: *"the model rates its
+   own summary, and we show that instead of hiding uncertainty."*
 5. **Start a second simulation with a *different* persona and the *same* script: Marcus Bell vs. CEO Fraud.** Play 4–5
    exchanges. *"Different target: Marcus is a helpdesk tech. Different conversation, different wording."*
 6. **Click *Close & analyze*.** The amber **Campaign match detected** banner and toast appear, with the similarity
@@ -142,6 +190,10 @@ natural next step at larger scale.
 7. *(Optional)* **Run Marcus vs. Fake IT Support and close it.** It appears as its own separate node, showing the
    system doesn't link everything. Then click **Generate report** on any closed incident: a ready-to-share markdown
    report with MITRE mapping, an IOC table, linked incidents and recommended defensive actions. Copy or download it.
+8. *(Optional, if asked "what if the model gets it wrong?")* Quote the eval line from
+   [Reliability](#reliability-measured-not-claimed), then explain `needs_review`. To show it live, restart the
+   backend with `MIRAGE_LLM_MODE=mock` and `MIRAGE_MOCK_FORCE_INVALID_EXTRACTION=1` and close an incident. It gets a
+   violet **Needs review** badge, no profile, and a **Retry extraction** button.
 
 ---
 
@@ -154,12 +206,12 @@ natural next step at larger scale.
 | `GET /attacker-scripts` · `GET /attacker-scripts/{id}` | Seeded Red-Team Simulator scripts |
 | `POST /incidents/simulate` | `{persona_id, attacker_script_id}` creates an incident plus the attacker's opening message |
 | `POST /incidents/{id}/respond` | One exchange: decoy reply, then attacker reply. Returns `new_messages` and the incident |
-| `POST /incidents/{id}/close` | Close, extract (pydantic-validated, one retry), embed, link. Returns the full detail |
+| `POST /incidents/{id}/close` | Close, extract (schema-constrained + pydantic-validated, one retry), embed, link. If validation fails twice: `status: "needs_review"`, `profile: null`, `review_message`, and `raw_extraction_output`. Calling it again retries extraction |
 | `POST /incidents/manual` | `{persona_id, attacker_message}` starts from a real message (no simulator). Continue with `/respond` + `{attacker_message}` |
 | `GET /incidents` | Feed: status, one-line summary, cluster size |
 | `GET /incidents/{id}` | Messages, profile, linked incidents with similarity scores, cluster members |
 | `GET /incidents/{id}/report` | `{filename, markdown}` incident report |
-| `GET /dashboard/stats` | Totals, open incidents, attacker clusters (connected components), top tactics and techniques |
+| `GET /dashboard/stats` | Totals, open and needs-review incidents, attacker clusters (connected components), top tactics and techniques |
 | `GET /threat-map` | Graph nodes, links and clusters with shared IOCs |
 | `POST /demo/reset` | Delete all incidents (keeps personas and scripts) |
 
@@ -186,10 +238,11 @@ curl -s localhost:8000/incidents/1/report
 ## How the campaign linking works
 
 1. **Extraction** ([backend/app/llm.py](backend/app/llm.py), [backend/app/prompts.py](backend/app/prompts.py)). The
-   transcript goes to Claude with a prompt that requires JSON only. The MITRE technique must come from a fixed list of
-   12 real ATT&CK techniques ([backend/app/mitre.py](backend/app/mitre.py)), and tactics from the fixed six-word
-   vocabulary. The reply is parsed and validated with the `ExtractedProfile` pydantic model. If validation fails,
-   the model gets the validation error back and one retry.
+   transcript goes to Claude with schema-constrained output. The MITRE technique must be one of 12 real ATT&CK
+   technique IDs ([backend/app/mitre.py](backend/app/mitre.py)), and tactics must come from the fixed six-word
+   vocabulary. The reply is validated with the strict `ExtractedProfile` pydantic model. If validation fails, the
+   model gets the validation error back and exactly one retry; after that the incident goes to `needs_review` (see
+   [Reliability](#reliability-measured-not-claimed)).
 2. **Embedding** ([backend/app/pipeline.py](backend/app/pipeline.py)). The embedded text is the attacker goal plus the
    normalised core indicator strings (domains, emails, phones, masked accounts, handles, ticket numbers), encoded with
    `all-MiniLM-L6-v2` into 384 dimensions.
@@ -216,18 +269,33 @@ sentence-transformers can't be installed.
   +44 7700 900xxx phone ranges, and masked account numbers.
 - Claude calls check `stop_reason == "refusal"` and surface a readable error (HTTP 502). Server-side refusal
   fallbacks are enabled by default.
+- Extraction never guesses: output that fails schema validation twice puts the incident in `needs_review` instead of
+  writing a profile.
 - Every turn is committed as soon as it is generated. If an LLM call fails mid-exchange, the next `/respond` resumes
   instead of losing the conversation. A per-incident lock stops auto-play from interleaving turns.
 
-## Tests
+## Tests and eval
 
 ```bash
 cd backend && python tests/test_llm_contract.py
 ```
 
-These tests check the live Claude request shape (beta fallbacks, effort, role alternation), refusal handling, the
-extraction retry-with-error-feedback loop, fallback degradation and PII masking. They use a mock HTTP transport, so no
-key or network is needed.
+```bash
+cd backend && python tests/test_needs_review.py
+```
+
+```bash
+python eval/run_eval.py
+```
+
+- **`test_llm_contract.py`** checks the live Claude request shape against a mock HTTP transport: schema-constrained
+  extraction, temperature only where the model accepts it and never on chat turns, exactly one retry, strict
+  rejection of near-miss values, refusal handling, fallback degradation and PII masking.
+- **`test_needs_review.py`** drives the real FastAPI app with the offline mock and a throwaway SQLite DB: invalid
+  extraction leads to `needs_review` with raw output stored, the report is blocked, retry recovers, and the column
+  migration is applied to an older database.
+- **`eval/run_eval.py`** runs the extraction eval described in [Reliability](#reliability-measured-not-claimed).
+  Use the backend virtualenv's Python and run it from the repo root.
 
 ## Deploying
 
@@ -257,7 +325,10 @@ backend/
     mitre.py           ATT&CK techniques, explanations, defenses, tactic vocabulary
     seed_data.py       default personas and attacker scripts
     routers/           personas, incidents, dashboard endpoints
-  tests/test_llm_contract.py
+  tests/               LLM contract tests, needs_review end-to-end test
+eval/
+  fixtures/            10 hand-labeled transcripts (8 clean, 2 ambiguous)
+  run_eval.py          extraction eval harness (one command, reportable score)
 frontend/
   src/App.jsx          state, auto-play loop, layout
   src/components/      StatsBar, Sidebar, IncidentView, AnalysisPanel, ReportModal, ThreatMap (d3-force)

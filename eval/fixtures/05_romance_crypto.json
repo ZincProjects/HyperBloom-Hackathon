@@ -1,0 +1,20 @@
+{
+  "id": "romance-01",
+  "script_type": "Romance Scam",
+  "difficulty": "clean",
+  "notes": "Outsider builds rapport, moves to WhatsApp, then asks for crypto to cover a 'customs fee' with a promise to repay. Rule 4 -> T1657. Likability (flattery), urgency (deadline) and reciprocity (repay) are explicit.",
+  "messages": [
+    {"sender": "attacker", "content": "Hi Amy, I hope this isn't too forward. I saw your comment in the Women in Finance group and you seem so warm and genuine. I'm Lucas."},
+    {"sender": "persona", "content": "aw that's sweet, thank you! sorry, do we know each other from somewhere?"},
+    {"sender": "attacker", "content": "Not yet, but I'd love to. I'm a structural engineer on a contract in Dubai, so I don't get to talk to kind people much. Can we chat on WhatsApp? +44 7700 900456"},
+    {"sender": "persona", "content": "haha maybe, I'm a bit busy with work training this week. what company are you with?"},
+    {"sender": "attacker", "content": "You're the only bright spot in my week. I'm embarrassed to ask, but my equipment shipment is stuck at customs and my bank has frozen my card while I'm abroad."},
+    {"sender": "persona", "content": "oh no, that sounds stressful. can't your company help?"},
+    {"sender": "attacker", "content": "They won't release funds until the project ends. I need $1,500 by tomorrow or the shipment is destroyed. Could you send it to my wallet bc1q-XXXX-7c21? I'll pay you back the moment I'm home, I promise."}
+  ],
+  "expected": {
+    "mitre_technique": "T1657",
+    "ioc_types": ["payment_account", "phone"],
+    "manipulation_tactics": ["likability", "reciprocity", "urgency"]
+  }
+}

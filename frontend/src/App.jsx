@@ -180,7 +180,9 @@ export default function App() {
       if (inFlightRef.current) await inFlightRef.current;
       const res = await api.close(id);
       if (selectedRef.current === id) setDetail(res);
-      if (res.linked_incidents?.length) {
+      if (res.status === "needs_review") {
+        notify(res.review_message, "review");
+      } else if (res.linked_incidents?.length) {
         const top = res.linked_incidents[0];
         notify(
           `Campaign match: ${res.ref} ↔ ${top.ref} (${(top.similarity * 100).toFixed(1)}% similar) — same attacker detected.`,
@@ -222,6 +224,7 @@ export default function App() {
     error: "border-red-500/50 bg-red-950/90 text-red-200",
     amber: "border-amber-400/60 bg-amber-950/90 text-amber-200",
     info: "border-cyan-500/50 bg-slate-900/95 text-cyan-200",
+    review: "border-violet-400/60 bg-violet-950/90 text-violet-200",
   };
 
   return (
@@ -291,6 +294,7 @@ export default function App() {
                 onReport={openReport}
                 reportLoading={reportLoading}
                 onSelectIncident={selectIncident}
+                onRetryExtraction={closeIncident}
               />
             </>
           ) : (

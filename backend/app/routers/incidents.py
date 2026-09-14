@@ -1,3 +1,4 @@
+import logging
 import threading
 from collections import defaultdict
 from contextlib import contextmanager
@@ -8,13 +9,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
-from ..llm import LLMError, attacker_reply, persona_reply
+from ..llm import ExtractionValidationError, LLMError, attacker_reply, persona_reply
 from ..models import AttackerScript, Incident, Message, Persona
 from ..pipeline import analyze_incident
 from ..report import build_report
 from ..schemas import ManualIncidentRequest, RespondRequest, SimulateRequest
-from ..serializers import all_clusters, incident_detail, incident_ref, incident_summary, message_dict
+from ..serializers import (
+    REVIEW_MESSAGE, all_clusters, incident_detail, incident_ref, incident_summary, message_dict,
+)
 
+log = logging.getLogger("mirage.incidents")
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 # One exchange/close at a time per incident, so auto-play can't interleave LLM turns.
@@ -95,7 +99,7 @@ def respond(incident_id: int, body: RespondRequest | None = None, db: Session = 
     """Advance the conversation by one exchange: persona reply, then the attacker's next message."""
     incident = _get_incident(db, incident_id)
     if incident.status != "active":
-        raise HTTPException(409, "Incident is closed")
+        raise HTTPException(409, f"Incident is {incident.status.replace('_', ' ')}")
     injected = (body.attacker_message or "").strip() if body else ""
     if incident.attacker_script is None and not injected:
         raise HTTPException(400, "Manual incidents need an attacker_message for each exchange")
@@ -121,11 +125,15 @@ def respond(incident_id: int, body: RespondRequest | None = None, db: Session = 
 
 @router.post("/{incident_id}/close")
 def close(incident_id: int, db: Session = Depends(get_db)):
-    """Close the incident, then extract the profile, embed it, and link similar incidents."""
+    """Close the incident, then extract the profile, embed it, and link similar incidents.
+
+    If extraction output fails schema validation on both attempts, no profile is written: the incident
+    becomes needs_review with the raw output stored. Calling close again retries extraction.
+    """
     incident = _get_incident(db, incident_id)
     new_link_count = 0
     with _incident_lock(incident_id):
-        if incident.status != "closed":
+        if incident.status == "active":
             incident.status = "closed"
             incident.closed_at = datetime.now(timezone.utc)
             db.commit()
@@ -133,9 +141,19 @@ def close(incident_id: int, db: Session = Depends(get_db)):
         if incident.profile is None and has_attacker_text:
             try:
                 new_link_count = len(analyze_incident(db, incident))
-            except LLMError as exc:
+            except ExtractionValidationError as exc:
                 db.rollback()
-                raise HTTPException(502, f"Incident closed, but analysis failed: {exc} Call close again to retry.")
+                incident.status = "needs_review"
+                incident.raw_extraction_output = exc.raw_output
+                db.commit()
+                log.warning("%s flagged needs_review: %s", incident_ref(incident.id), exc)
+            except LLMError as exc:  # API/network failure, not a validation failure
+                db.rollback()
+                raise HTTPException(502, f"Extraction call failed: {exc} Call close again to retry.")
+            else:
+                incident.status = "closed"
+                incident.raw_extraction_output = None
+                db.commit()
 
     detail = incident_detail(db, incident)
     detail["new_link_count"] = new_link_count
@@ -164,6 +182,8 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
 @router.get("/{incident_id}/report")
 def get_report(incident_id: int, db: Session = Depends(get_db)):
     incident = _get_incident(db, incident_id)
+    if incident.status == "needs_review":
+        raise HTTPException(409, REVIEW_MESSAGE)
     if incident.profile is None:
         raise HTTPException(409, "Close & analyze the incident before generating a report")
     return {

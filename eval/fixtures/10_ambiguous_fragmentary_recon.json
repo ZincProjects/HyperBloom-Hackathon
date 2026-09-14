@@ -1,0 +1,22 @@
+{
+  "id": "ambiguous-02",
+  "script_type": "Ambiguous: fragmentary reconnaissance",
+  "difficulty": "ambiguous",
+  "notes": "Deliberately low-signal. The attacker never states a goal, sends no link and asks for no money, and the chat breaks off. What they do is elicit information directly: the target's direct line, and who approves payments. Rule 3 -> T1598. The invoice number is the only IOC ('other'). The only explicit tactic is urgency ('a bit urgent'). A good extractor should report low or medium goal confidence here (not scored).",
+  "messages": [
+    {"sender": "attacker", "content": "hey is this finance?"},
+    {"sender": "persona", "content": "hi, this is Amy in accounts payable. who's this?"},
+    {"sender": "attacker", "content": "question about an outstanding invoice, #88213. its a bit urgent"},
+    {"sender": "persona", "content": "sure, which vendor is it from? I can look it up"},
+    {"sender": "attacker", "content": "who approves payments over 10k there, you or your manager?"},
+    {"sender": "persona", "content": "usually my manager, Linda. can you tell me which company you're with first?"},
+    {"sender": "attacker", "content": "ok thx. whats your direct line, easier to explain on a call"},
+    {"sender": "persona", "content": "I'd rather keep it on chat for now, sorry! which company did you say?"},
+    {"sender": "attacker", "content": "nvm"}
+  ],
+  "expected": {
+    "mitre_technique": "T1598",
+    "ioc_types": ["other"],
+    "manipulation_tactics": ["urgency"]
+  }
+}

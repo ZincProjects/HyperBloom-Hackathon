@@ -1,0 +1,20 @@
+{
+  "id": "fake-it-01",
+  "script_type": "Fake IT Support",
+  "difficulty": "clean",
+  "notes": "Fake security team sends a credential-reset link and then asks for the MFA code. Rule 1 (link to a page capturing credentials) -> T1598.003. The ticket number is an 'other' IOC. Fear (suspension) and urgency (20 minutes) are explicit.",
+  "messages": [
+    {"sender": "attacker", "content": "Hello Amy, this is Acme Security Operations. Your mailbox was used to send spam overnight (ticket SEC-20417). We need to secure it immediately."},
+    {"sender": "persona", "content": "omg what?? I didn't send anything. what do I need to do?"},
+    {"sender": "attacker", "content": "Reset your password at https://acme-m365-security.example/reset using your current credentials so we can verify ownership."},
+    {"sender": "persona", "content": "ok it's loading. sorry, which team did you say you're on? I don't think we covered this in onboarding"},
+    {"sender": "attacker", "content": "Security Operations. You'll receive a 6-digit code on your phone. Send it to me here so I can finish the reset on our side."},
+    {"sender": "persona", "content": "I thought we're not supposed to share codes? can I call the helpdesk to check?"},
+    {"sender": "attacker", "content": "There's no time for that. If the reset isn't completed in 20 minutes your account will be suspended and you'll lose access to email and payroll."}
+  ],
+  "expected": {
+    "mitre_technique": "T1598.003",
+    "ioc_types": ["other", "url"],
+    "manipulation_tactics": ["authority", "fear", "urgency"]
+  }
+}

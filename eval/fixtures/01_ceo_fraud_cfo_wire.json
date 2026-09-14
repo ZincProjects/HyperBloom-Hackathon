@@ -1,0 +1,22 @@
+{
+  "id": "ceo-fraud-01",
+  "script_type": "CEO Fraud",
+  "difficulty": "clean",
+  "notes": "CFO impersonation pushing a confidential same-day wire. Rule 2 (pretends to be a specific executive) -> T1656. Authority (CFO, board) and urgency (end of day) are explicit.",
+  "messages": [
+    {"sender": "attacker", "content": "Hi Amy, Margaret Chen here (CFO). Are you free right now? I need a discreet favour for the board and I can't do it from my phone."},
+    {"sender": "persona", "content": "hi! sorry, yes I'm here - what do you need? I'm still pretty new so tell me if I need to ask Linda first"},
+    {"sender": "attacker", "content": "No need to involve Linda, this is board-level and confidential. We're finalising an acquisition and the escrow deposit to Lakeside Holdings must go out before end of day."},
+    {"sender": "persona", "content": "oh wow ok. do you have an invoice or PO number I can attach? the ERP won't let me submit without one"},
+    {"sender": "attacker", "content": "Legal is sending the paperwork later. Please set up the wire for $62,000 to Lakeside Holdings, acct XXXX-4410, routing XXXX-2208. I'm authorising it as CFO."},
+    {"sender": "persona", "content": "ok, one sec, it's asking for a second approver. is there a number I can call you on to confirm?"},
+    {"sender": "attacker", "content": "I'm in the board session and can't take calls. Email me at m.chen.cfo@acme-finance-office.example if you need it in writing, but this has to be done today."},
+    {"sender": "persona", "content": "sorry, that isn't your usual email address, is it? let me just double check something first"},
+    {"sender": "attacker", "content": "It's my private board address. Amy, the board is waiting on confirmation. Please don't hold this up."}
+  ],
+  "expected": {
+    "mitre_technique": "T1656",
+    "ioc_types": ["email", "payment_account"],
+    "manipulation_tactics": ["authority", "urgency"]
+  }
+}

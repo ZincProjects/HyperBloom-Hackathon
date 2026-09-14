@@ -9,6 +9,12 @@ from .mitre import TECHNIQUES, technique_id
 from .models import AttackerScript, Incident, IncidentLink, IncidentProfile, Message, Persona
 
 
+REVIEW_MESSAGE = (
+    "Flagged for manual review — extraction did not meet the validation schema. "
+    "No profile was generated; retry extraction or inspect the raw model output."
+)
+
+
 def iso(dt: datetime | None) -> str | None:
     if dt is None:
         return None
@@ -50,6 +56,7 @@ def profile_dict(p: IncidentProfile) -> dict:
         "iocs": p.iocs,
         "manipulation_tactics": p.manipulation_tactics,
         "attacker_goal": p.attacker_goal,
+        "attacker_goal_confidence": p.attacker_goal_confidence,
         "analyzer": p.analyzer,
         "embedding_model": p.embedding_model,
         "embedding_dims": len(p.embedding or []),
@@ -87,6 +94,8 @@ def linked_incidents(db: Session, incident_id: int) -> list[dict]:
 
 
 def _summary(incident: Incident) -> str:
+    if incident.status == "needs_review":
+        return "Flagged for manual review: extraction failed schema validation."
     if incident.profile:
         return incident.profile.attacker_goal
     if incident.messages:
@@ -127,6 +136,8 @@ def incident_detail(db: Session, incident: Incident) -> dict:
     data["messages"] = [message_dict(m) for m in incident.messages]
     data["profile"] = profile_dict(incident.profile) if incident.profile else None
     data["linked_incidents"] = linked_incidents(db, incident.id)
+    data["review_message"] = REVIEW_MESSAGE if incident.status == "needs_review" else None
+    data["raw_extraction_output"] = incident.raw_extraction_output
     cluster_id = index.get(incident.id)
     data["cluster_members"] = clusters.get(cluster_id, []) if cluster_id is not None else []
     return data
