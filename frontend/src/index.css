@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-950 text-slate-200 antialiased;
+}
+
+/* Rendered markdown incident report */
+.report h1 { @apply text-xl font-semibold text-slate-100 mb-4; }
+.report h2 { @apply text-xs font-semibold uppercase tracking-widest text-cyan-300 mt-7 mb-2; }
+.report p { @apply text-slate-300 leading-relaxed my-2; }
+.report table { @apply w-full text-sm border-collapse my-3; }
+.report th { @apply text-left text-slate-400 font-medium border-b border-slate-700 py-1.5 pr-3; }
+.report td { @apply border-b border-slate-800 py-1.5 pr-3 align-top text-slate-300; }
+.report code { @apply font-mono text-amber-300 text-[0.85em]; }
+.report ul { @apply list-disc pl-5 space-y-1 text-slate-300; }
+.report ol { @apply list-decimal pl-5 space-y-1.5 text-slate-300; }
+.report blockquote { @apply border-l-2 border-slate-700 pl-3 text-slate-400 text-sm my-1; }
+.report blockquote p { @apply my-0.5 text-slate-400; }
+.report a { @apply text-cyan-400 underline underline-offset-2; }
+.report strong { @apply text-slate-100; }
+.report hr { @apply border-slate-800 my-6; }
+.report em { @apply text-slate-500; }
+
+@keyframes halo-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.6; }
+}
+.halo-pulse { animation: halo-pulse 2.8s ease-in-out infinite; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
